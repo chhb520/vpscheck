@@ -11,9 +11,29 @@ timestamp=$(date +"%Y-%m-%d %H:%M:%S")
 # 定义日志文件路径
 log_file="/var/log/vps_check_$(date +%Y%m%d).log"
 
-# 函数：输出到终端和日志文件
+# 函数：输出到终端和日志文件，统一管理
 log_and_echo() {
-    echo -e "$@" | tee -a "$log_file"
+    echo -e "$1" | tee -a "$log_file"
+}
+
+# 函数：格式化系统运行时间，转成 天 小时 分钟格式
+get_uptime_in_days() {
+    raw=$(uptime -p)  # 如 "up 4 weeks, 3 days, 6 hours, 23 minutes"
+    raw=${raw#up }
+
+    weeks=0
+    days=0
+    hours=0
+    minutes=0
+
+    [[ $raw =~ ([0-9]+)[[:space:]]+week ]] && weeks=${BASH_REMATCH[1]}
+    [[ $raw =~ ([0-9]+)[[:space:]]+day ]] && days=${BASH_REMATCH[1]}
+    [[ $raw =~ ([0-9]+)[[:space:]]+hour ]] && hours=${BASH_REMATCH[1]}
+    [[ $raw =~ ([0-9]+)[[:space:]]+minute ]] && minutes=${BASH_REMATCH[1]}
+
+    total_days=$((weeks * 7 + days))
+
+    echo "${total_days} 天, ${hours} 小时, ${minutes} 分钟"
 }
 
 # 清空或创建日志文件
@@ -22,7 +42,7 @@ log_and_echo() {
 # 输出报告头部
 log_and_echo "${RED}${BOLD}==============================${RESET}"
 log_and_echo "${RED}${BOLD}VPS 全面巡检报告${RESET}"
-log_and_echo "${RED}${BOLD}生成时间: $timestamp${RESET}"
+log_and_echo "${RED}${BOLD}生成时间: ${timestamp}${RESET}"
 log_and_echo "${RED}${BOLD}==============================${RESET}"
 log_and_echo ""
 
@@ -39,9 +59,9 @@ log_and_echo ""
 
 # 系统信息
 log_and_echo "${RED}${BOLD}[系统信息]${RESET}"
-log_and_echo "系统运行时间: $(uptime -p)"
+log_and_echo "系统运行时间: $(get_uptime_in_days)"
 log_and_echo "负载平均值: $(uptime | awk -F 'load average:' '{print $2}' | xargs)"
-log_and_echo -e "内存使用情况 (MB):"
+log_and_echo "内存使用情况 (MB):"
 free -m | tee -a "$log_file"
 log_and_echo ""
 
@@ -50,10 +70,13 @@ log_and_echo "${RED}${BOLD}[磁盘使用情况]${RESET}"
 df -h | tee -a "$log_file"
 log_and_echo ""
 
-# VPS IPv4和IPv6地址
+# VPS IPv4和IPv6地址，增加hostname -I兼容
 log_and_echo "${RED}${BOLD}[VPS IP地址]${RESET}"
-ipv4=$(ip -4 addr show scope global | grep inet | awk '{print $2}' | cut -d/ -f1 | head -n1)
-ipv6=$(ip -6 addr show scope global | grep inet6 | awk '{print $2}' | cut -d/ -f1 | head -n1)
+ipv4=$(ip -4 addr show scope global 2>/dev/null | grep inet | awk '{print $2}' | cut -d/ -f1 | head -n1)
+ipv6=$(ip -6 addr show scope global 2>/dev/null | grep inet6 | awk '{print $2}' | cut -d/ -f1 | head -n1)
+if [[ -z "$ipv4" ]]; then
+  ipv4=$(hostname -I | awk '{print $1}')
+fi
 log_and_echo "IPv4地址: ${ipv4:-无}"
 log_and_echo "IPv6地址: ${ipv6:-无}"
 log_and_echo ""
@@ -95,9 +118,9 @@ log_and_echo ""
 log_and_echo "${RED}${BOLD}[网络流量统计]${RESET}"
 rx_total=0
 tx_total=0
-while read -r line; do
+mapfile -t net_dev_lines < <(tail -n +3 /proc/net/dev)
+for line in "${net_dev_lines[@]}"; do
     iface=$(echo "$line" | awk -F':' '{print $1}' | tr -d ' ')
-    # 排除回环和虚拟网卡
     if [[ "$iface" == "lo" ]] || [[ "$iface" == docker* ]] || [[ "$iface" == veth* ]] || [[ "$iface" == br* ]]; then
         continue
     fi
@@ -105,7 +128,8 @@ while read -r line; do
     tx_bytes=$(echo "$line" | awk '{print $10}')
     rx_total=$((rx_total + rx_bytes))
     tx_total=$((tx_total + tx_bytes))
-done < <(tail -n +3 /proc/net/dev)
+done
+
 rx_gb=$(awk "BEGIN {printf \"%.2f\", $rx_total/1024/1024/1024}")
 tx_gb=$(awk "BEGIN {printf \"%.2f\", $tx_total/1024/1024/1024}")
 total_gb=$(awk "BEGIN {printf \"%.2f\", ($rx_total+$tx_total)/1024/1024/1024}")
@@ -115,4 +139,4 @@ log_and_echo "出站流量: ${tx_gb} GB"
 log_and_echo ""
 
 # 巡检完成
-log_and_echo "${RED}${BOLD}巡检完成 ✅ 日志已保存到 $log_file${RESET}"
+log_and_echo "${RED}${BOLD}巡检完成 ✅ 日志已保存到 ${log_file}${RESET}"
