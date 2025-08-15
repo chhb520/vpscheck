@@ -1,5 +1,5 @@
 # VPS 全面巡检报告
-#一键脚本如下：
+## 一键脚本如下：
 ```
 bash <(curl -sSL https://raw.githubusercontent.com/chhb520/vpscheck/refs/heads/main/check.sh)
 ```
