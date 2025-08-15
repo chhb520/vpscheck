@@ -1,9 +1,9 @@
-
+# VPS 全面巡检报告
 #一键脚本如下：
 ```
 bash <(curl -sSL https://raw.githubusercontent.com/chhb520/vpscheck/refs/heads/main/check.sh)
 ```
-# VPS 全面巡检报告
+
 
 这是一个 VPS 的巡查脚本输出示例：
 
