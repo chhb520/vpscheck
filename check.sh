@@ -70,14 +70,22 @@ log_and_echo "${RED}${BOLD}[磁盘使用情况]${RESET}"
 df -h | tee -a "$log_file"
 log_and_echo ""
 
-# VPS IPv4和IPv6地址，增加hostname -I兼容
+# VPS IP地址显示（内网、公网、IPv6）
 log_and_echo "${RED}${BOLD}[VPS IP地址]${RESET}"
-ipv4=$(ip -4 addr show scope global 2>/dev/null | grep inet | awk '{print $2}' | cut -d/ -f1 | head -n1)
-ipv6=$(ip -6 addr show scope global 2>/dev/null | grep inet6 | awk '{print $2}' | cut -d/ -f1 | head -n1)
-if [[ -z "$ipv4" ]]; then
-  ipv4=$(hostname -I | awk '{print $1}')
+
+# 内网 IPv4（本机网卡 IP）
+private_ipv4=$(ip -4 addr show scope global 2>/dev/null | grep inet | awk '{print $2}' | cut -d/ -f1 | head -n1)
+if [[ -z "$private_ipv4" ]]; then
+  private_ipv4=$(hostname -I | awk '{print $1}')
 fi
-log_and_echo "IPv4地址: ${ipv4:-无}"
+log_and_echo "内网 IPv4地址: ${private_ipv4:-无}"
+
+# 公网 IPv4（通过外部服务获取）
+public_ipv4=$(curl -s4 ifconfig.me || curl -s4 ip.sb || echo "无")
+log_and_echo "公网 IPv4地址: ${public_ipv4}"
+
+# IPv6
+ipv6=$(ip -6 addr show scope global 2>/dev/null | grep inet6 | awk '{print $2}' | cut -d/ -f1 | head -n1)
 log_and_echo "IPv6地址: ${ipv6:-无}"
 log_and_echo ""
 
